@@ -19,6 +19,30 @@ public class KubernetesResourceAdapter {
         return registry.getClient(clusterId).getKubernetesVersion().getGitVersion();
     }
 
+    /** 保留整个 PodList，其中 metadata 包含 continue 和 resourceVersion。 */
+    public PodList listPods(String clusterId, String namespace, PodListQuery query) {
+        registry.requireAllowedNamespace(clusterId, namespace);
+        PodListQuery effective = query == null ? PodListQuery.firstPage() : query;
+
+        List<String> fieldSelectors = new ArrayList<>();
+        if (effective.nodeName() != null) {
+            fieldSelectors.add("spec.nodeName=" + effective.nodeName());
+        }
+        if (effective.phase() != null) {
+            fieldSelectors.add("status.phase=" + effective.phase());
+        }
+
+        ListOptions options = new ListOptionsBuilder()
+                .withLimit((long) effective.limit())
+                .withContinue(effective.continueToken())
+                .withLabelSelector(effective.labelSelector())
+                .withFieldSelector(fieldSelectors.isEmpty() ? null : String.join(",", fieldSelectors))
+                .build();
+
+        return registry.getClient(clusterId)
+                .pods().inNamespace(namespace).list(options);
+    }
+
     public record PodListQuery(
             Integer limit,
             String continueToken,
